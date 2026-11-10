@@ -4,6 +4,8 @@ from rest_framework.views import APIView
 
 from apps.users.models import Role
 
+from . import uploads
+from .file_serializers import PayloadTooLarge
 from .models import Task, TaskStatus
 
 
@@ -46,3 +48,18 @@ class CanEditTask(BasePermission):
             and obj.buyer_id == request.user.pk
             and obj.status == TaskStatus.NEW
         )
+
+
+class UploadSizeLimit(BasePermission):
+    """Refuses a request whose declared body is too big before the body is read.
+
+    The file limit is checked again after parsing (`uploads.check_upload`); this only avoids
+    spooling a huge body to disk. A request without Content-Length (chunked) passes here.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        declared = request.META.get("CONTENT_LENGTH") or ""
+        too_big = declared.isascii() and declared.isdecimal()
+        if too_big and int(declared) > uploads.max_request_bytes():
+            raise PayloadTooLarge
+        return True
