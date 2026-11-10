@@ -81,3 +81,25 @@ def test_task_with_history_cannot_be_deleted():
 
     with pytest.raises(ProtectedError):
         event.task.delete()
+
+
+def test_new_object_with_an_existing_pk_cannot_overwrite_an_event():
+    event = TaskEventFactory()
+    forged = TaskEvent(pk=event.pk, task=event.task, action="updated")
+
+    with pytest.raises(ImmutableRecordError):
+        forged.save()
+
+    assert TaskEvent.objects.get(pk=event.pk).action == "created"
+
+
+def test_bulk_create_cannot_upsert_events():
+    event = TaskEventFactory()
+    forged = TaskEvent(pk=event.pk, task=event.task, action="updated")
+
+    with pytest.raises(ImmutableRecordError):
+        TaskEvent.objects.bulk_create(
+            [forged], update_conflicts=True, update_fields=["action"], unique_fields=["id"]
+        )
+
+    assert TaskEvent.objects.get(pk=event.pk).action == "created"

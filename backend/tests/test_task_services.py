@@ -2,6 +2,7 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
+from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 
 from apps.tasks import services
@@ -124,3 +125,31 @@ def test_task_is_not_created_when_the_event_cannot_be_written():
         services.create_task(buyer=UserFactory(), data=brief())
 
     assert not Task.objects.exists()
+
+
+def test_update_task_refuses_another_buyer_and_other_roles():
+    task = TaskFactory(offer="Old")
+
+    for actor in (UserFactory(), UserFactory(creative=True), UserFactory(lead=True)):
+        with pytest.raises(PermissionDenied):
+            services.update_task(task_id=task.pk, actor=actor, data={"offer": "New"})
+
+    assert Task.objects.get(pk=task.pk).offer == "Old"
+    assert not TaskEvent.objects.exists()
+
+
+@pytest.mark.parametrize("trait", ["creative", "lead"])
+def test_create_task_refuses_non_buyers(trait):
+    with pytest.raises(PermissionDenied):
+        services.create_task(buyer=UserFactory(**{trait: True}), data=brief())
+
+    assert not Task.objects.exists()
+
+
+def test_description_change_is_journaled_without_copying_the_text():
+    task = TaskFactory(description="A long original text")
+
+    services.update_task(task_id=task.pk, actor=task.buyer, data={"description": "A long new text"})
+
+    (event,) = task.events.all()
+    assert event.payload == {"changes": {"description": {"changed": True}}}

@@ -66,6 +66,12 @@ class TaskViewSet(
     def get_queryset(self) -> QuerySet[Task]:
         return Task.objects.visible_to(self.request.user).select_related("buyer", "assignee")
 
+    def filter_queryset(self, queryset: QuerySet[Task]) -> QuerySet[Task]:
+        # List filters must not turn a visible task into a 404 on the detail and events URLs.
+        if self.action == "list":
+            return super().filter_queryset(queryset)
+        return queryset
+
     def get_permissions(self) -> list[BasePermission]:
         permissions = super().get_permissions()
         if self.action == "create":

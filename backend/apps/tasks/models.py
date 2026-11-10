@@ -134,6 +134,11 @@ class TaskEventQuerySet(models.QuerySet):
     def bulk_update(self, objs, fields, batch_size=None):
         raise ImmutableRecordError("TaskEvent is append-only: update is not allowed.")
 
+    def bulk_create(self, objs, *args, update_conflicts=False, **kwargs):
+        if update_conflicts:
+            raise ImmutableRecordError("TaskEvent is append-only: upsert is not allowed.")
+        return super().bulk_create(objs, *args, update_conflicts=update_conflicts, **kwargs)
+
 
 class TaskEvent(models.Model):
     """Append-only journal of what happened to a task."""
@@ -162,7 +167,8 @@ class TaskEvent(models.Model):
         return f"{self.action} #{self.task_id}"
 
     def save(self, *args, **kwargs):
-        if not self._state.adding:
+        # A new object with an existing pk would make Django try an UPDATE first.
+        if not self._state.adding or self.pk is not None:
             raise ImmutableRecordError("TaskEvent is append-only: update is not allowed.")
         super().save(*args, **kwargs)
 

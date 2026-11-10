@@ -159,3 +159,15 @@ def test_list_query_count_does_not_grow_with_the_number_of_tasks(lead_client):
         lead_client.get(LIST_URL)
 
     assert len(many) == len(few)
+
+
+@pytest.mark.parametrize("value", ["1.5", "1E+999", "0", "-1", "99999999999", "abc"])
+def test_assignee_filter_accepts_only_bounded_integers(lead_client, value):
+    assert lead_client.get(LIST_URL, {"assignee": value}).status_code == 400
+
+
+def test_list_filters_do_not_affect_detail_and_events(lead_client):
+    task = TaskFactory()
+
+    assert lead_client.get(f"{LIST_URL}{task.pk}/", {"status": "done"}).status_code == 200
+    assert lead_client.get(f"{LIST_URL}{task.pk}/events/", {"priority": "bad"}).status_code == 200
