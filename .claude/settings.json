@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(make db)",
+      "Bash(make ps)",
+      "Bash(make check)",
+      "Bash(make lint)",
+      "Bash(make fmt)",
+      "Bash(make test)",
+      "Bash(make lt)",
+      "Bash(make ci)",
+      "Bash(make config)",
+      "Bash(make front-lint)",
+      "Bash(make front-test)",
+      "Bash(make front-build)",
+      "Bash(make req)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(~/.ssh/**)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push origin main:*)",
+      "Bash(make clean)",
+      "Bash(make downv)",
+      "Bash(make rebase)"
+    ]
+  }
+}
