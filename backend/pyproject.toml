@@ -13,6 +13,7 @@ dependencies = [
     "whitenoise (>=6.9,<7.0)",
     "argon2-cffi (>=25.1,<26)",
     "django-filter (>=25.1,<26.0)",
+    "filetype (>=1.2,<2.0)",
 ]
 
 [tool.poetry]
