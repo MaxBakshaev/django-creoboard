@@ -508,7 +508,7 @@ def test_a_declared_size_over_the_limit_is_refused_before_the_body_is_parsed(api
     settings.MAX_UPLOAD_BYTES = 1000
     settings.UPLOAD_OVERHEAD_BYTES = 1000
     task = working_task()
-    as_user(api_client, task.assignee)
+    api_client.force_login(task.assignee)  # a real session: force_authenticate skips the check
 
     with mock.patch("apps.tasks.file_serializers.check_file_field") as check:
         response = api_client.post(
@@ -524,7 +524,7 @@ def test_the_declared_size_limit_applies_to_references_too(api_client, settings)
     settings.MAX_UPLOAD_BYTES = 1000
     settings.UPLOAD_OVERHEAD_BYTES = 0
     task = TaskFactory()
-    as_user(api_client, task.buyer)
+    api_client.force_login(task.buyer)
 
     response = api_client.post(
         refs_url(task.pk),
@@ -534,6 +534,34 @@ def test_the_declared_size_limit_applies_to_references_too(api_client, settings)
     )
 
     assert response.status_code == 413
+
+
+def test_the_declared_size_is_checked_before_csrf_reads_the_body(csrf_client, settings):
+    """Django's CSRF check parses a POST body; an oversized one must be refused first."""
+    settings.MAX_UPLOAD_BYTES = 1000
+    settings.UPLOAD_OVERHEAD_BYTES = 0
+    task = working_task()
+    csrf_client.force_login(task.assignee)  # no CSRF token is sent: 403 if the body were read
+
+    with mock.patch("apps.tasks.file_serializers.check_file_field") as check:
+        response = csrf_client.post(
+            atts_url(task.pk), {"file": upload()}, format="multipart", CONTENT_LENGTH="1001"
+        )
+
+    assert response.status_code == 413
+    check.assert_not_called()
+
+
+@pytest.mark.parametrize("declared", ["abc", "-5", "", "9" * 5000, "1e9"])
+def test_a_malformed_content_length_does_not_crash(api_client, declared):
+    task = working_task()
+    api_client.force_login(task.assignee)
+
+    response = api_client.post(
+        atts_url(task.pk), {"file": upload()}, format="multipart", CONTENT_LENGTH=declared
+    )
+
+    assert response.status_code in {201, 400, 413}
 
 
 def test_the_same_name_twice_gives_two_results_with_different_files(api_client):

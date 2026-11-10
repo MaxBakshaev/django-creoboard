@@ -16,15 +16,16 @@ from rest_framework.views import APIView
 
 from apps.users.models import Role
 
-from . import services
+from . import services, uploads
 from .file_serializers import (
     AttachmentCreateSerializer,
     AttachmentSerializer,
+    PayloadTooLarge,
     ReferenceCreateSerializer,
     ReferenceSerializer,
 )
 from .models import ReferenceKind, Task, TaskAttachment, TaskReference
-from .permissions import HasBusinessRole, IsBuyer, IsCreative, UploadSizeLimit
+from .permissions import HasBusinessRole, IsBuyer, IsCreative
 from .views import CONFLICT, FORBIDDEN, INVALID, NOT_AUTHENTICATED, NOT_FOUND, Conflict
 
 logger = logging.getLogger(__name__)
@@ -42,12 +43,32 @@ class IgnoreClientContentNegotiation(BaseContentNegotiation):
         return renderers[0], renderers[0].media_type
 
 
+class RejectOversizedUploadMixin:
+    """Refuses an oversized upload before anything reads the body.
+
+    DRF checks CSRF while authenticating, and Django's CSRF check parses the multipart body
+    (it looks for a form token before the header). So the declared size has to be checked in
+    `initial`, ahead of authentication, to avoid spooling a huge body to a temporary file for a
+    request that is refused anyway. Nginx `client_max_body_size` stays the first line.
+    (A separate authentication class would do the same but makes drf-spectacular emit two
+    "cookieAuth" components.)
+    """
+
+    def initial(self, request: Request, *args, **kwargs):
+        if request.method == "POST":
+            try:
+                uploads.check_declared_size(request.META.get("CONTENT_LENGTH"))
+            except uploads.UploadTooLarge as error:
+                raise PayloadTooLarge(str(error)) from error
+        super().initial(request, *args, **kwargs)
+
+
 def _visible_task(request: Request, task_id: int) -> Task:
     """The task if the user sees it; a foreign task is a 404, never a 403."""
     return get_object_or_404(Task.objects.visible_to(request.user), pk=task_id)
 
 
-class TaskReferencesView(APIView):
+class TaskReferencesView(RejectOversizedUploadMixin, APIView):
     """References of a task: any viewer lists them, only the author buyer adds them."""
 
     permission_classes = [IsAuthenticated, HasBusinessRole]
@@ -55,7 +76,7 @@ class TaskReferencesView(APIView):
     def get_permissions(self):
         permissions = super().get_permissions()
         if self.request.method == "POST":
-            permissions += [IsBuyer(), UploadSizeLimit()]
+            permissions += [IsBuyer()]
         return permissions
 
     @extend_schema(
@@ -101,7 +122,7 @@ class TaskReferencesView(APIView):
         return Response(ReferenceSerializer(reference).data, status=201)
 
 
-class TaskAttachmentsView(APIView):
+class TaskAttachmentsView(RejectOversizedUploadMixin, APIView):
     """Results of a task: any viewer lists them, only the assignee uploads them."""
 
     permission_classes = [IsAuthenticated, HasBusinessRole]
@@ -109,7 +130,7 @@ class TaskAttachmentsView(APIView):
     def get_permissions(self):
         permissions = super().get_permissions()
         if self.request.method == "POST":
-            permissions += [IsCreative(), UploadSizeLimit()]
+            permissions += [IsCreative()]
         return permissions
 
     @extend_schema(

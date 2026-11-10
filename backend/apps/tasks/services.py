@@ -276,25 +276,54 @@ def request_revision(*, task_id: int, actor, comment: str) -> Task:
 
 
 # --- references and results (files) ----------------------------------------------------------
+#
+# A file is written to the storage BEFORE the row lock is taken, so a slow disk never holds the
+# lock of a task (`submit`, `accept` and `take` wait for it). A cheap unlocked check before the
+# write refuses the obvious cases; the same rules are checked again under the lock, because the
+# task may have changed meanwhile. The file is deleted by name if anything fails afterwards,
+# including the commit itself.
 
 
-def _store(instance: TaskReference | TaskAttachment, upload: CheckedUpload) -> None:
-    """Writes the file under its random name and saves the row (inside the caller's
-    transaction)."""
-    instance.file.save(upload.stored_name, upload.file, save=False)
-    instance.save()
+def _write_file(model: type[TaskReference | TaskAttachment], upload: CheckedUpload) -> str:
+    """Stores the file under its random name; returns the name the storage actually used."""
+    field = model._meta.get_field("file")
+    return field.storage.save(field.generate_filename(None, upload.stored_name), upload.file)
 
 
-def _discard_file(instance: TaskReference | TaskAttachment) -> None:
+def _delete_file(model: type[TaskReference | TaskAttachment], name: str) -> None:
     """Removes a file whose row did not make it into the database."""
-    if instance.file:
-        try:
-            instance.file.storage.delete(instance.file.name)
-        except OSError:
-            logger.warning("Could not remove an orphaned upload: %s", instance.file.name)
+    if not name:
+        return
+    try:
+        model._meta.get_field("file").storage.delete(name)
+    except OSError:
+        logger.warning("Could not remove an orphaned upload (%s)", model.__name__)
 
 
-@transaction.atomic
+def _check_reference_allowed(task: Task, actor) -> None:
+    if getattr(actor, "role", "") != Role.BUYER or task.buyer_id != actor.pk:
+        raise PermissionDenied("Добавлять референсы может только автор задачи.")
+    if task.status == TaskStatus.DONE:
+        raise TaskConflictError("К принятой задаче нельзя добавлять референсы.")
+    if task.references.count() >= MAX_REFERENCES_PER_TASK:
+        raise TaskConflictError(
+            f"К задаче можно добавить не больше {MAX_REFERENCES_PER_TASK} референсов."
+        )
+
+
+def _check_attachment_allowed(task: Task, actor) -> None:
+    if getattr(actor, "role", "") != Role.CREATIVE or task.assignee_id != actor.pk:
+        raise PermissionDenied("Загружать результат может только исполнитель задачи.")
+    if task.status not in ATTACHMENT_STATUSES:
+        raise TaskConflictError(
+            "Результат можно загружать только в статусах «В работе» и «Правки»."
+        )
+    if task.attachments.filter(round=task.revision_count).count() >= MAX_ATTACHMENTS_PER_ROUND:
+        raise TaskConflictError(
+            f"За один раунд можно загрузить не больше {MAX_ATTACHMENTS_PER_ROUND} файлов."
+        )
+
+
 def add_reference(
     *,
     task_id: int,
@@ -310,49 +339,51 @@ def add_reference(
     """
     if bool(url) == (upload is not None):
         raise ValueError("Exactly one of url and upload is required.")
-    task = Task.objects.select_for_update().get(pk=task_id)
-    if getattr(actor, "role", "") != Role.BUYER or task.buyer_id != actor.pk:
-        raise PermissionDenied("Добавлять референсы может только автор задачи.")
-    if task.status == TaskStatus.DONE:
-        raise TaskConflictError("К принятой задаче нельзя добавлять референсы.")
-    if task.references.count() >= MAX_REFERENCES_PER_TASK:
-        raise TaskConflictError(
-            f"К задаче можно добавить не больше {MAX_REFERENCES_PER_TASK} референсов."
+    name = ""
+    if upload is not None:
+        _check_reference_allowed(Task.objects.get(pk=task_id), actor)  # before the big write
+        name = _write_file(TaskReference, upload)
+    try:
+        return _create_reference(
+            task_id=task_id, actor=actor, url=url, upload=upload, note=note, name=name
         )
+    except BaseException:
+        _delete_file(TaskReference, name)
+        raise
 
+
+@transaction.atomic
+def _create_reference(
+    *, task_id: int, actor, url: str, upload: CheckedUpload | None, note: str, name: str
+) -> TaskReference:
+    task = Task.objects.select_for_update().get(pk=task_id)
+    _check_reference_allowed(task, actor)
     reference = TaskReference(task=task, note=note.strip()[:MAX_NOTE_LENGTH])
     if upload is None:
         reference.kind, reference.url = ReferenceKind.LINK, url
     else:
         reference.kind = ReferenceKind.FILE
+        reference.file = name
         reference.original_name = upload.original_name
         reference.size = upload.size
         reference.content_type = upload.content_type
-    try:
-        if upload is None:
-            reference.save()
-        else:
-            _store(reference, upload)
-        TaskEvent.objects.create(
-            task=task,
-            actor=actor,
-            action=TaskEventAction.REFERENCE_ADDED,
-            from_status=task.status,
-            to_status=task.status,
-            payload={
-                "reference_id": reference.pk,
-                "kind": reference.kind,
-                **({"url": url} if upload is None else {"original_name": reference.original_name}),
-            },
-        )
-    except BaseException:
-        _discard_file(reference)
-        raise
+    reference.save()
+    TaskEvent.objects.create(
+        task=task,
+        actor=actor,
+        action=TaskEventAction.REFERENCE_ADDED,
+        from_status=task.status,
+        to_status=task.status,
+        payload={
+            "reference_id": reference.pk,
+            "kind": reference.kind,
+            **({"url": url} if upload is None else {"original_name": reference.original_name}),
+        },
+    )
     logger.info("Reference added: id=%s task=%s kind=%s", reference.pk, task.pk, reference.kind)
     return reference
 
 
-@transaction.atomic
 def add_attachment(*, task_id: int, actor, upload: CheckedUpload) -> TaskAttachment:
     """The assignee uploads a result of the current round.
 
@@ -360,44 +391,41 @@ def add_attachment(*, task_id: int, actor, upload: CheckedUpload) -> TaskAttachm
     `revision_count` read under the row lock, never a client value; the same lock is taken by
     `submit`, so an upload and a submit cannot interleave.
     """
-    task = Task.objects.select_for_update().get(pk=task_id)
-    if getattr(actor, "role", "") != Role.CREATIVE or task.assignee_id != actor.pk:
-        raise PermissionDenied("Загружать результат может только исполнитель задачи.")
-    if task.status not in ATTACHMENT_STATUSES:
-        raise TaskConflictError(
-            "Результат можно загружать только в статусах «В работе» и «Правки»."
-        )
-    if task.attachments.filter(round=task.revision_count).count() >= MAX_ATTACHMENTS_PER_ROUND:
-        raise TaskConflictError(
-            f"За один раунд можно загрузить не больше {MAX_ATTACHMENTS_PER_ROUND} файлов."
-        )
+    _check_attachment_allowed(Task.objects.get(pk=task_id), actor)  # before the big write
+    name = _write_file(TaskAttachment, upload)
+    try:
+        return _create_attachment(task_id=task_id, actor=actor, upload=upload, name=name)
+    except BaseException:
+        _delete_file(TaskAttachment, name)
+        raise
 
-    attachment = TaskAttachment(
+
+@transaction.atomic
+def _create_attachment(*, task_id: int, actor, upload: CheckedUpload, name: str) -> TaskAttachment:
+    task = Task.objects.select_for_update().get(pk=task_id)
+    _check_attachment_allowed(task, actor)
+    attachment = TaskAttachment.objects.create(
         task=task,
         uploaded_by=actor,
+        file=name,
         original_name=upload.original_name,
         size=upload.size,
         content_type=upload.content_type,
         round=task.revision_count,
     )
-    try:
-        _store(attachment, upload)
-        TaskEvent.objects.create(
-            task=task,
-            actor=actor,
-            action=TaskEventAction.ATTACHMENT_ADDED,
-            from_status=task.status,
-            to_status=task.status,
-            payload={
-                "attachment_id": attachment.pk,
-                "original_name": attachment.original_name,
-                "size": attachment.size,
-                "round": attachment.round,
-            },
-        )
-    except BaseException:
-        _discard_file(attachment)
-        raise
+    TaskEvent.objects.create(
+        task=task,
+        actor=actor,
+        action=TaskEventAction.ATTACHMENT_ADDED,
+        from_status=task.status,
+        to_status=task.status,
+        payload={
+            "attachment_id": attachment.pk,
+            "original_name": attachment.original_name,
+            "size": attachment.size,
+            "round": attachment.round,
+        },
+    )
     logger.info(
         "Attachment added: id=%s task=%s round=%s", attachment.pk, task.pk, attachment.round
     )

@@ -100,6 +100,20 @@ def test_request_limit_is_the_file_limit_plus_overhead(settings):
     assert uploads.max_request_bytes() == 1024
 
 
+@pytest.mark.parametrize("declared", [None, "", "abc", "-1", "1e9", "9" * 5000, "  "])
+def test_a_missing_or_malformed_declared_size_passes(declared):
+    uploads.check_declared_size(declared)
+
+
+def test_the_declared_size_is_compared_with_the_request_limit(settings):
+    settings.MAX_UPLOAD_BYTES = 1000
+    settings.UPLOAD_OVERHEAD_BYTES = 24
+
+    uploads.check_declared_size("1024")
+    with pytest.raises(UploadTooLarge):
+        uploads.check_declared_size("1025")
+
+
 # --- names on disk and for display --------------------------------------------------------
 
 

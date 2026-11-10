@@ -74,6 +74,18 @@ def max_request_bytes() -> int:
     return settings.MAX_UPLOAD_BYTES + settings.UPLOAD_OVERHEAD_BYTES
 
 
+def check_declared_size(content_length: str | None) -> None:
+    """Raises `UploadTooLarge` when the declared request size is over the limit.
+
+    A missing or malformed header passes: the size of the parsed file is checked later.
+    """
+    value = (content_length or "").strip()
+    if not (value.isascii() and value.isdecimal()) or len(value) > 18:
+        return
+    if int(value) > max_request_bytes():
+        raise UploadTooLarge(f"Запрос больше {settings.MAX_UPLOAD_MB} МБ.")
+
+
 def sanitize_filename(name: str) -> str:
     """Returns a safe display name (no path, control or bidi characters, limited length).
 
