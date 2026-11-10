@@ -183,3 +183,72 @@ class TaskEvent(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ImmutableRecordError("TaskEvent is append-only: delete is not allowed.")
+
+
+# --- files ----------------------------------------------------------------------------------
+
+MAX_REFERENCES_PER_TASK = 20
+MAX_ATTACHMENTS_PER_ROUND = 20
+MAX_URL_LENGTH = 2000
+MAX_NOTE_LENGTH = 500
+
+
+class ReferenceKind(models.TextChoices):
+    LINK = "link", "Ссылка"
+    FILE = "file", "Файл"
+
+
+class TaskReference(models.Model):
+    """A reference the buyer attaches to a brief: a link (http/https) or an uploaded file.
+
+    Files are stored under a random name; `original_name` is metadata for display only.
+    """
+
+    task = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="references")
+    kind = models.CharField(max_length=8, choices=ReferenceKind.choices)
+    url = models.URLField(max_length=MAX_URL_LENGTH, blank=True)
+    file = models.FileField(upload_to="references/", blank=True, max_length=255)
+    original_name = models.CharField(max_length=255, blank=True)
+    size = models.PositiveBigIntegerField(default=0)
+    content_type = models.CharField(max_length=100, blank=True)
+    note = models.CharField(max_length=MAX_NOTE_LENGTH, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [models.Index(fields=["task"], name="taskref_task_idx")]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(kind="link", file="") & ~models.Q(url="")
+                    | models.Q(kind="file", url="") & ~models.Q(file="")
+                ),
+                name="taskref_link_xor_file",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"reference #{self.pk} of task #{self.task_id}"
+
+
+class TaskAttachment(models.Model):
+    """A result file the assignee uploads. `round` is 0 for the first submission and N after
+    the N-th revision request; the server sets it from `Task.revision_count`."""
+
+    task = models.ForeignKey(Task, on_delete=models.PROTECT, related_name="attachments")
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="uploaded_attachments"
+    )
+    file = models.FileField(upload_to="attachments/", max_length=255)
+    original_name = models.CharField(max_length=255)
+    size = models.PositiveBigIntegerField()
+    content_type = models.CharField(max_length=100)
+    round = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [models.Index(fields=["task", "round"], name="taskattach_task_round_idx")]
+
+    def __str__(self) -> str:
+        return f"attachment #{self.pk} of task #{self.task_id}"
