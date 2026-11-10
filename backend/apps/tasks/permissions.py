@@ -23,6 +23,13 @@ class IsBuyer(BasePermission):
         return getattr(request.user, "role", "") == Role.BUYER
 
 
+class IsCreative(BasePermission):
+    message = "Действие доступно только креативщику."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        return getattr(request.user, "role", "") == Role.CREATIVE
+
+
 class CanEditTask(BasePermission):
     """The buyer who created the task may edit it while it is still "new".
 
