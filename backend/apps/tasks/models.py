@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from apps.users.models import Role
+
 MAX_QUANTITY = 500
 
 
@@ -26,6 +28,22 @@ class Priority(models.TextChoices):
     NORMAL = "normal", "Обычный"
     HIGH = "high", "Высокий"
     URGENT = "urgent", "Срочный"
+
+
+class TaskQuerySet(models.QuerySet):
+    def visible_to(self, user) -> "TaskQuerySet":
+        """Tasks the user may see (docs/ARCHITECTURE.md, section 5).
+
+        Anyone else, including a user without a business role, sees nothing.
+        """
+        role = getattr(user, "role", "")
+        if role == Role.LEAD:
+            return self
+        if role == Role.BUYER:
+            return self.filter(buyer=user)
+        if role == Role.CREATIVE:
+            return self.filter(models.Q(status=TaskStatus.NEW) | models.Q(assignee=user))
+        return self.none()
 
 
 class Task(models.Model):
@@ -65,6 +83,8 @@ class Task(models.Model):
     submitted_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TaskQuerySet.as_manager()
 
     class Meta:
         ordering = ["-created_at", "-id"]

@@ -8,6 +8,7 @@ from .api import HealthView
 api_v1 = [
     path("health/", HealthView.as_view(), name="health"),
     path("auth/", include("apps.users.urls")),
+    path("", include("apps.tasks.urls")),
 ]
 
 # The schema and Swagger UI are exposed only in DEBUG; lead-only access in prod is step 13.
