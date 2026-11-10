@@ -63,7 +63,7 @@ def lead():
 
 
 def started(task, assignee, status=TaskStatus.IN_PROGRESS):
-    """A task in work. Built through the ORM because the transitions come in step 5."""
+    """A task in work, built through the ORM (tests may; the app changes status in services)."""
     task.status = status
     task.assignee = assignee
     task.save()
