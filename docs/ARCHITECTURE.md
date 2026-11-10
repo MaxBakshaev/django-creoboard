@@ -122,10 +122,10 @@ django-creoboard/
 Индексы: `(status)`, `(assignee, status)`, `(buyer)`, `(deadline)`, `(completed_at)`.
 
 ### tasks.TaskReference
-`task`, `kind` ∈ {link, file}, `url` (только http/https) или `file`, `note`, `created_at`.
+`task`, `kind` ∈ {link, file}, `url` (только http/https, до 2000 символов, без логина и пароля) или `file`, для файла ещё `original_name`, `size`, `content_type` (определяется по содержимому), `note` (до 500 символов), `created_at`. `CheckConstraint`: ссылка без файла или файл без ссылки. Не больше 20 референсов на задачу.
 
 ### tasks.TaskAttachment (результаты работы)
-`task`, `uploaded_by`, `file`, `original_name`, `size`, `content_type`, `round` (0 — первая сдача, N — после N-й правки), `created_at`.
+`task`, `uploaded_by`, `file`, `original_name`, `size`, `content_type`, `round` (0 — первая сдача, N — после N-й правки; сервер берёт его из `Task.revision_count` под блокировкой строки задачи, клиент не передаёт), `created_at`. Не больше 20 файлов на раунд.
 
 ### tasks.TaskEvent (журнал, только добавление)
 `task`, `actor` (null для системных), `action` ∈ {created, updated, taken, submitted, accepted, revision_requested, reference_added, attachment_added, ai_usage_added, ai_usage_changed, ai_usage_deleted}, `from_status`, `to_status`, `payload` (JSONB, например комментарий к правкам), `created_at`. Методы `save` (для существующей записи) и `delete` запрещены, в админке запись только для чтения.
@@ -149,7 +149,7 @@ django-creoboard/
 | Действие | Из | В | Кто | Условия | Побочные эффекты |
 |---|---|---|---|---|---|
 | take | new | in_progress | creative | assignee пуст | assignee, `taken_at` |
-| submit | in_progress, revision | review | assignee | есть вложение текущего раунда (проверка добавляется в шаге 6 вместе с моделью вложений) | `submitted_at` |
+| submit | in_progress, revision | review | assignee | есть вложение текущего раунда (`round = revision_count`), иначе 409; проверяется после роли и статуса | `submitted_at` |
 | accept | review | done | buyer-автор | — | `completed_at` |
 | request_revision | review | revision | buyer-автор | комментарий обязателен | `revision_count += 1` |
 
@@ -190,9 +190,10 @@ django-creoboard/
 | `POST /tasks/{id}/take/` | creative | взять задачу; существующая задача не в «Новые» даёт 409 без деталей (см. исключение ниже) |
 | `POST /tasks/{id}/submit/` `/accept/` `/request-revision/` | creative (submit), buyer-автор (остальные) | переходы; `request-revision` принимает `{"comment": "..."}`, 1..2000 символов; чужая невидимая задача даёт 404 |
 | `GET /tasks/{id}/events/` | по видимости | история от старых к новым, без пагинации |
-| `GET, POST /tasks/{id}/references/` | buyer | референсы |
-| `GET, POST /tasks/{id}/attachments/` | creative (POST) | результаты |
-| `GET /attachments/{id}/download/` | по видимости | скачивание с проверкой прав |
+| `GET /tasks/{id}/references/`, `GET /tasks/{id}/attachments/` | по видимости задачи | списки без пагинации (размер ограничен 20 референсами и 20 файлами на раунд) |
+| `POST /tasks/{id}/references/` | buyer-автор | ссылка (JSON: `kind=link`, `url`, `note`) или файл (multipart: `kind=file`, `file`, `note`); до статуса «Готово»; creative и lead 403, чужая задача 404, «Готово» и превышение лимита 409 |
+| `POST /tasks/{id}/attachments/` | creative-исполнитель | результат (multipart, поле `file`); только в «В работе» и «Правки» (иначе 409); другой creative на видимой задаче 403, невидимая задача 404; `round` от клиента не принимается |
+| `GET /attachments/{id}/download/`, `GET /references/{id}/download/` | по видимости задачи | скачивание с проверкой прав (чужое 404, без входа 401); для ссылки-референса 404 |
 | `GET, POST /tasks/{id}/ai-usage/`, `PATCH, DELETE /ai-usage/{id}/` | creative | AI-расходы |
 | `GET /ai-services/` | авторизованные | справочник |
 | `GET /analytics/summary/`, `/workload/`, `/durations/`, `/ai-costs/` | lead | аналитика |
@@ -201,6 +202,8 @@ django-creoboard/
 Списки возвращают страницы (`count`, `next`, `previous`, `results`): `?page=N&page_size=M`, по умолчанию 20, максимум 100. Пользователь без роли (суперпользователь) получает 403 на все эндпоинты задач.
 
 Коды ошибок: 400 валидация, 401 не авторизован, 403 нет права, 404 нет такого объекта (в том числе чужого), 409 конфликт перехода или гонка, 413 слишком большой файл, 429 лимит запросов.
+
+Порядок проверок при загрузке: 401 → роль (403) → поиск видимой задачи (404) → владелец (403) → разбор и проверка файла (400, 413) → статус и лимиты количества под блокировкой строки (409). Файл с неверным расширением, подменённым содержимым или пустой даёт 400; `submit` без вложения текущего раунда даёт 409.
 
 **Исключение из правила «чужое — 404»: действие `take`.** Креативщик, который берёт существующую задачу не в статусе «Новые» (её уже взял он сам или другой креативщик, либо она ушла дальше по статусам), получает 409, а не 404. Так устаревшая доска получает понятный ответ, а гонка двух креативщиков даёт одинаковый результат и при параллельных, и при последовательных запросах. Ограничения исключения:
 
@@ -231,11 +234,13 @@ django-creoboard/
 
 ## 11. Загрузка файлов
 
-- Расширения из белого списка (изображения, видео, pdf, zip, psd), проверка сигнатуры файла библиотекой `filetype`, проверка размера (`MAX_UPLOAD_MB`).
-- Имя на диске случайное (UUID), оригинальное имя хранится только как метаданные.
-- Файлы лежат в volume `media`, nginx их напрямую не отдаёт.
-- Скачивание через `/attachments/{id}/download/`: проверка прав, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`.
-- Ссылки-референсы принимают только `http` и `https`, отображаются с `rel="noopener noreferrer"`.
+- Расширения из белого списка: `jpg, jpeg, png, gif, webp, mp4, mov, webm, pdf, zip, psd` (SVG и HTML исключены: в них можно спрятать скрипт). Расширение берётся из последнего суффикса имени, содержимое проверяется по сигнатуре библиотекой `filetype` и должно соответствовать расширению (`.png` с телом exe, `.exe.png`, `.png.exe` дают 400). Пустой файл даёт 400. Архивы не распаковываются.
+- Размер ограничен `MAX_UPLOAD_MB` (по умолчанию 100), ответ 413. Слоёв три: 1) nginx `client_max_body_size` не меньше `MAX_UPLOAD_MB` + 1 МБ на multipart-обёртку; 2) приложение до разбора тела смотрит `Content-Length` (`UploadSizeLimit`); 3) после разбора проверяется `file.size`. Настройки Django `DATA_UPLOAD_MAX_MEMORY_SIZE` (1 МиБ) и `FILE_UPLOAD_MAX_MEMORY_SIZE` (2,5 МиБ) размер файла не ограничивают: первая считает тело запроса без файлов, вторая задаёт порог, после которого файл уходит во временный файл на диске.
+- Имя на диске случайное (UUID) с расширением, которое выбрал сервер. Оригинальное имя хранится только как метаданные и очищается: без пути, управляющих символов и bidi-override (U+202E), не длиннее 150 символов.
+- Файлы лежат в `MEDIA_ROOT` (volume `media`), вне статики. У `MEDIA_URL` нет маршрута, nginx каталог не отдаёт, whitenoise раздаёт только статику.
+- Скачивание через `/attachments/{id}/download/` и `/references/{id}/download/`: проверка видимости задачи, `Content-Disposition: attachment` (имя кодируется по RFC 6266), `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`, тип берётся из сохранённого определённого типа.
+- Файл, записанный на диск в транзакции, которая откатилась, удаляется; повторная загрузка с тем же именем создаёт новую запись с новым именем на диске.
+- Ссылки-референсы принимают только `http` и `https` (без логина и пароля), отображаются с `rel="noopener noreferrer"`.
 - Нужно проверить лимит размера тела запроса в nginx Elestio: он может быть меньше нашего.
 
 ## 12. CI/CD
