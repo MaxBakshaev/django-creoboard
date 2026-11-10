@@ -74,9 +74,7 @@ make db
 🔹 4. Backend (виртуальное окружение в корне репозитория):
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend\requirements-dev.txt
+make venv          # .venv на Python 3.12 + зависимости; активировать его не нужно
 make migrate
 make seed
 make run
@@ -95,7 +93,8 @@ make front
 
 | Команда | Что делает |
 |---|---|
-| `make db` | поднять локальную БД (Docker) |
+| `make venv` / `make install` | создать `.venv` (Python 3.12) / переустановить зависимости |
+| `make db` | поднять локальную БД (Docker, `127.0.0.1:5433`) |
 | `make run` / `make front` | сервер Django / сервер Vite |
 | `make migrate` / `make mm` | применить / создать миграции |
 | `make seed` | демо-данные (при `DEMO_MODE=1`) |
@@ -104,7 +103,9 @@ make front
 | `make lt` | тесты + линт |
 | `make check` | `manage.py check` и проверка забытых миграций |
 | `make front-lint` / `front-test` / `front-build` | проверки frontend |
-| `make ci` | все проверки как в CI, запускать перед PR |
+| `make check-deploy` | `manage.py check --deploy` на prod-настройках |
+| `make ci-back` / `make ci-front` | проверки backend / frontend как в CI |
+| `make ci` | `ci-back` + `ci-front` + `config`, все проверки как в CI |
 | `make req` | экспорт зависимостей poetry в `requirements*.txt` |
 | `make secret` | сгенерировать `DJANGO_SECRET_KEY` |
 | `make down` / `make downv` | остановить контейнеры / вместе с данными БД |
@@ -116,7 +117,8 @@ make front
 make db
 make test          # backend
 make front-test    # frontend
-make ci            # всё сразу, как в CI
+make ci-back       # проверки backend как в CI
+make ci            # всё сразу, как в CI (когда есть frontend)
 ```
 
 ## 🚀 Деплой
