@@ -16,7 +16,7 @@
 
 ## Команды
 
-Все повседневные команды вынесены в `Makefile` в корне репозитория. Используй `make`, а не длинные команды. Виртуальное окружение (`.venv` в корне) должно быть активировано: `.\.venv\Scripts\Activate.ps1`.
+Все повседневные команды вынесены в `Makefile` в корне репозитория. Используй `make`, а не длинные команды. Виртуальное окружение (`.venv` в корне, создаётся `make venv`) активировать не нужно: Makefile сам ставит его первым в PATH. Без `.venv` используется Python из PATH (так работает CI).
 
 ```powershell
 make db             # локальная БД (Docker)
@@ -27,7 +27,9 @@ make lint ; make fmt
 make lt             # тесты + линт
 make check          # manage.py check + проверка забытых миграций
 make front ; make front-lint ; make front-test ; make front-build
-make ci             # все проверки как в CI, запускать перед PR
+make ci-back ; make ci-front   # проверки backend / frontend как в CI
+make ci             # ci-back + ci-front + config, все проверки как в CI
+make venv ; make install       # создать .venv (Python 3.12) / переустановить зависимости
 make req            # после изменения зависимостей poetry
 ```
 
@@ -53,7 +55,7 @@ docs/                                        документация
 1. Перед кодом прочитай план шага в `docs/DEVELOPMENT_PLAN.md` и **сначала предложи план** (plan mode). Код пиши после подтверждения.
 2. Один шаг плана = одна ветка `feat/<номер>-<slug>` = один PR. Прямых коммитов в `main` нет.
 3. Коммиты по Conventional Commits: `feat(tasks): atomic take`, `fix(auth): ...`, `test(...)`, `docs(...)`, `ci(...)`, `chore(...)`. Коммит небольшой и по одной теме.
-4. После коммитов: `git push -u origin <ветка>`, затем `gh pr create`. Перед push запусти `make ci`. Ход CI смотри через `gh pr checks --watch`. Если CI красный, исправляй, а не отключай проверки.
+4. После коммитов: `git push -u origin <ветка>`, затем `gh pr create`. Перед push запусти `make ci` (пока нет `frontend/` и prod-compose, только `make ci-back`). Ход CI смотри через `gh pr checks --watch`. Если CI красный, исправляй, а не отключай проверки.
 5. Merge делает человек, не ты.
 6. Если шаг оказался больше плана, остановись и скажи об этом, не раздувай PR.
 
@@ -87,7 +89,7 @@ docs/                                        документация
 ## Definition of Done для PR
 
 - [ ] Тесты написаны и проходят локально и в CI
-- [ ] `make ci` проходит (ruff, `check`, миграции, тесты, frontend), `check --deploy` проходит в CI
+- [ ] `make ci` (до шага 10 `make ci-back`) проходит (ruff, `check`, миграции, тесты, frontend), `check --deploy` проходит в CI
 - [ ] После изменения зависимостей выполнен `make req`
 - [ ] Миграции включены в PR
 - [ ] Права доступа покрыты негативными тестами
@@ -96,4 +98,5 @@ docs/                                        документация
 
 ## Уроки (дополняй после каждой ошибки)
 
-- (пока пусто)
+- Windows: в `DATABASE_URL` использовать `127.0.0.1`, а не `localhost` (`localhost` может сначала уйти на недоступный `::1` и подвесить подключение). Порт БД из Docker 5433, потому что 5432 занят локальным PostgreSQL.
+- Python в PATH на машине разработчика может быть не 3.12 (там 3.10): окружение создавать через `make venv`, а не голым `python -m venv`.

@@ -12,7 +12,7 @@
 ```
 Прочитай CLAUDE.md и docs/ARCHITECTURE.md. Выполни шаг N из docs/DEVELOPMENT_PLAN.md.
 Сначала предложи план (не пиши код), затем после моего подтверждения реализуй
-с тестами в ветке feat/N-slug, делай небольшие коммиты, перед PR запусти make ci, в конце открой PR.
+с тестами в ветке feat/N-slug, делай небольшие коммиты, перед PR запусти make ci (пока нет frontend/ и prod-compose: make ci-back), в конце открой PR.
 ```
 
 ## Шаги
@@ -52,7 +52,7 @@
 - Poetry (`backend/pyproject.toml`, группа `dev`), экспорт зависимостей `make req`.
 - Django-проект с настройками `base/dev/prod`, django-environ.
 - Подключение к PostgreSQL, `docker/docker-compose.yml` для локальной БД (`make db`).
-- Приложения-пустышки, `GET /api/v1/health/`, drf-spectacular.
+- Приложения-пустышки, минимальная `users.User(AbstractUser)` и `AUTH_USER_MODEL` (чтобы шаг 2 не применил миграции со стандартным `auth.User`; поле `role` добавит шаг 3), `GET /api/v1/health/`, drf-spectacular.
 - `backend/Dockerfile` (multi-stage, не root).
 - `ci.yml` (backend-часть с Postgres-сервисом, вызывает `make lint`, `make check`, `make test`) и `security.yml` (gitleaks, pip-audit, bandit).
 - Dependabot.
@@ -65,7 +65,7 @@
 - **Готово, когда:** по HTTPS-адресу сервиса открывается заглушка и отвечает `/api/v1/health/`.
 
 ### 3. Аутентификация
-- `User` с полем `role`, Argon2, валидаторы паролей.
+- Поле `role` у `User` (модель создана в шаге 1), Argon2, валидаторы паролей.
 - `GET /auth/csrf/`, `POST /auth/login/`, `POST /auth/logout/`, `GET /auth/me/`.
 - Throttle на login, настройка cookie и CSRF.
 - Тесты: успешный вход, неверный пароль, лимит попыток, выход, CSRF-защита, неактивный пользователь.

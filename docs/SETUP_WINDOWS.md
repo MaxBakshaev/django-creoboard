@@ -218,16 +218,16 @@ cd $HOME\django-creoboard
 Copy-Item .env.example .env          # заполните значения для разработки
 make secret                          # вставьте результат в DJANGO_SECRET_KEY
 make db                              # PostgreSQL в Docker
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r backend\requirements-dev.txt
+make venv                            # .venv на Python 3.12 + зависимости, активация не нужна
 make migrate
 make run
 ```
 
 Если вы работаете через Poetry: `cd backend ; poetry install ; poetry shell`, а затем `make`-команды из корня.
 
-Список команд смотрите в `Makefile` и в разделе «Команды Makefile» файла `README.md`. Перед каждым PR запускайте `make ci`.
+Список команд смотрите в `Makefile` и в разделе «Команды Makefile» файла `README.md`. Перед каждым PR запускайте `make ci` (до появления frontend: `make ci-back`).
+
+БД из Docker публикуется на `127.0.0.1:5433`, потому что порт 5432 часто занят локальным PostgreSQL. В `.env` укажите `POSTGRES_PORT=5433` и `DATABASE_URL=postgres://...@127.0.0.1:5433/...`. Адрес `127.0.0.1` надёжнее `localhost`: на Windows `localhost` может сначала разрешиться в недоступный `::1`, и подключение будет подвисать.
 
 ## 9. Частые проблемы на Windows
 
@@ -235,10 +235,10 @@ make run
 |---|---|
 | `Activate.ps1` не запускается («выполнение сценариев отключено») | `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
 | Ошибки `\r` в shell-скриптах внутри Docker | Окончания строк LF: проверьте `.gitattributes` и `core.autocrlf input`, пересоздайте файлы |
-| Порт 5432 занят | Остановите локальный PostgreSQL или смените порт в `docker/docker-compose.yml` |
+| Порт БД занят | Смените `POSTGRES_PORT` в `.env` (по умолчанию 5433) и порт в `DATABASE_URL` |
 | `make` не распознан | Установите по разделу 2, откройте новое окно PowerShell, проверьте `make --version` |
 | `docker compose` не найден, есть только `docker-compose` | `make DC="docker-compose --project-directory . -f docker/docker-compose.yml" db` |
-| В `make`-цели не находится `ruff` или `pytest` | Активируйте виртуальное окружение: `.\.venv\Scripts\Activate.ps1` |
+| В `make`-цели не находится `ruff` или `pytest` | Создайте окружение: `make venv` (активировать его не нужно). Нужен Python 3.12: `py -3.12 --version` |
 | `&&` не работает | Используйте `;` в Windows PowerShell 5.1 |
 | Docker жрёт память | Ограничения в `.wslconfig` (раздел 2) |
 | `claude` не найден после установки | Откройте новое окно PowerShell, при необходимости перезайдите в систему |

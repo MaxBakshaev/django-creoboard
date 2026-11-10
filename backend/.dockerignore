@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+media/
+staticfiles/
+tests/
+Dockerfile
+.dockerignore
+poetry.lock
+poetry.toml
+pyproject.toml
+requirements-dev.txt

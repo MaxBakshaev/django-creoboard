@@ -1,0 +1,4 @@
+[virtualenvs]
+# The project venv lives in the repo root (.venv) and is managed by `make venv`.
+# Poetry is used only for pyproject/lock/export, so it must not create its own env.
+create = false
