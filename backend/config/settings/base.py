@@ -62,6 +62,9 @@ TEMPLATES = [
 ]
 
 DATABASES = {"default": env.db("DATABASE_URL")}
+# Fail fast instead of hanging: on Windows "localhost" may resolve to an unreachable ::1 first,
+# and libpq then falls back to 127.0.0.1 only after this timeout.
+DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = 5
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "users.User"
