@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "drf_spectacular",
+    "django_filters",
     "apps.users",
     "apps.tasks",
     "apps.ai_usage",
@@ -117,6 +118,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # Lists are paginated: ?page=N&page_size=M (up to 100).
+    "DEFAULT_PAGINATION_CLASS": "apps.tasks.pagination.TaskPagination",
+    "PAGE_SIZE": 20,
 }
 
 SPECTACULAR_SETTINGS = {
@@ -124,6 +128,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": "API of the creative department task board.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # Task.status, TaskEvent.from_status and to_status share one set of choices.
+    "ENUM_NAME_OVERRIDES": {"TaskStatusEnum": "apps.tasks.models.TaskStatus"},
 }
 
 LOGGING = {

@@ -35,3 +35,12 @@ class MeSerializer(serializers.ModelSerializer):
         model = get_user_model()
         fields = ["id", "username", "first_name", "last_name", "role"]
         read_only_fields = fields
+
+
+class UserBriefSerializer(serializers.ModelSerializer):
+    """Minimal public view of a user, for embedding in other resources."""
+
+    class Meta:
+        model = get_user_model()
+        fields = ["id", "username", "first_name", "last_name"]
+        read_only_fields = fields

@@ -185,9 +185,9 @@ django-creoboard/
 | `GET /auth/csrf/` | все | выставляет cookie csrftoken |
 | `POST /auth/login/`, `POST /auth/logout/`, `GET /auth/me/` | см. | вход с лимитом попыток, выход, текущий пользователь |
 | `GET, POST /tasks/` | по роли | список с фильтрами (status, assignee, priority, geo, overdue, search, ordering), создание (buyer) |
-| `GET, PATCH /tasks/{id}/` | по роли | карточка, правка (buyer, пока new) |
+| `GET, PATCH /tasks/{id}/` | по роли | карточка, правка (автор-buyer, пока new; видимая, но не своя или не в `new` задача даёт 403, гонка со взятием даёт 409) |
 | `POST /tasks/{id}/take/` `/submit/` `/accept/` `/request-revision/` | по роли | переходы |
-| `GET /tasks/{id}/events/` | по видимости | история |
+| `GET /tasks/{id}/events/` | по видимости | история от старых к новым, без пагинации |
 | `GET, POST /tasks/{id}/references/` | buyer | референсы |
 | `GET, POST /tasks/{id}/attachments/` | creative (POST) | результаты |
 | `GET /attachments/{id}/download/` | по видимости | скачивание с проверкой прав |
@@ -195,6 +195,8 @@ django-creoboard/
 | `GET /ai-services/` | авторизованные | справочник |
 | `GET /analytics/summary/`, `/workload/`, `/durations/`, `/ai-costs/` | lead | аналитика |
 | `GET /schema/`, `/docs/` | только при DEBUG | OpenAPI и Swagger; доступ для lead в prod добавляется в шаге 13 |
+
+Списки возвращают страницы (`count`, `next`, `previous`, `results`): `?page=N&page_size=M`, по умолчанию 20, максимум 100. Пользователь без роли (суперпользователь) получает 403 на все эндпоинты задач.
 
 Коды ошибок: 400 валидация, 401 не авторизован, 403 нет права, 404 нет такого объекта (в том числе чужого), 409 конфликт перехода или гонка, 413 слишком большой файл, 429 лимит запросов.
 

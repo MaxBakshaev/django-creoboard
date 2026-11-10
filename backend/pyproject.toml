@@ -12,6 +12,7 @@ dependencies = [
     "gunicorn (>=23.0,<24.0)",
     "whitenoise (>=6.9,<7.0)",
     "argon2-cffi (>=25.1,<26)",
+    "django-filter (>=25.1,<26.0)",
 ]
 
 [tool.poetry]
