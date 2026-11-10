@@ -45,6 +45,8 @@ DJANGO_SETTINGS_MODULE = "config.settings.dev"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "--strict-markers"
+# WhiteNoise warns about the missing STATIC_ROOT, which exists only after collectstatic.
+filterwarnings = ["ignore:No directory at:UserWarning"]
 
 [tool.coverage.run]
 source = ["apps", "config"]
