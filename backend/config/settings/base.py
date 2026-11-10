@@ -100,8 +100,25 @@ STORAGES = {
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
+# Uploaded files. There is deliberately no URL route for MEDIA_URL: files are served only by
+# the authorized download endpoints, and nginx must not serve this directory either.
 MEDIA_URL = "media/"
 MEDIA_ROOT = env.path("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media"))
+FILE_UPLOAD_PERMISSIONS = 0o640
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o750
+
+# Upload limits. There are three layers: nginx `client_max_body_size` (must be at least
+# MAX_UPLOAD_MB + UPLOAD_OVERHEAD_BYTES), the Content-Length check before the body is parsed
+# and the size check after parsing (see apps/tasks/uploads.py).
+# Both Django settings below do NOT limit the size of a file: DATA_UPLOAD_MAX_MEMORY_SIZE
+# counts only the non-file part of a request (JSON, form fields); FILE_UPLOAD_MAX_MEMORY_SIZE
+# is the threshold above which an uploaded file goes to a temporary file instead of memory.
+# The values are read at request time, so a test may lower the limit.
+MAX_UPLOAD_MB = env.int("MAX_UPLOAD_MB", default=100)
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+UPLOAD_OVERHEAD_BYTES = 1024 * 1024  # multipart boundaries and the other form fields
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
+DATA_UPLOAD_MAX_MEMORY_SIZE = 1_048_576
 
 # Login throttling. Counters are kept in the per-process cache, so with several gunicorn
 # workers the real limit is up to (workers x nominal); the strict limit is nginx limit_req.

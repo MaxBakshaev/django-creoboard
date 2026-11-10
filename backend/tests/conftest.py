@@ -11,6 +11,12 @@ def _clear_cache():
     cache.clear()
 
 
+@pytest.fixture(autouse=True)
+def _media_root(settings, tmp_path):
+    """Uploaded files of a test go to a temporary directory, never into the repository."""
+    settings.MEDIA_ROOT = tmp_path / "media"
+
+
 @pytest.fixture
 def api_client() -> APIClient:
     return APIClient()

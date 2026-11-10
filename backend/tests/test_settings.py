@@ -32,3 +32,27 @@ def test_openapi_schema_builds_without_warnings(tmp_path):
     )
 
     assert (tmp_path / "schema.yml").read_text(encoding="utf-8").startswith("openapi:")
+
+
+def test_upload_limits_are_consistent():
+    assert settings.MAX_UPLOAD_BYTES == settings.MAX_UPLOAD_MB * 1024 * 1024
+    assert settings.MAX_UPLOAD_MB > 0
+    # Large files must go to a temporary file on disk, never be held in memory whole.
+    assert settings.FILE_UPLOAD_MAX_MEMORY_SIZE < settings.MAX_UPLOAD_BYTES
+    # Non-file request bodies (JSON, form fields) stay small.
+    assert settings.DATA_UPLOAD_MAX_MEMORY_SIZE <= 1024 * 1024
+
+
+def test_uploaded_files_are_stored_outside_static_and_group_readable_only():
+    media = str(settings.MEDIA_ROOT)
+
+    assert media != str(settings.STATIC_ROOT)
+    assert not media.startswith(str(settings.STATIC_ROOT))
+    assert settings.FILE_UPLOAD_PERMISSIONS == 0o640
+
+
+@pytest.mark.parametrize(
+    "path", ["/media/attachments/x.png", "/media/", "/static/attachments/x.png"]
+)
+def test_media_is_not_served_directly(path):
+    assert APIClient().get(path).status_code == 404
