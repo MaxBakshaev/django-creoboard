@@ -14,6 +14,15 @@ class TaskStatus(models.TextChoices):
     DONE = "done", "Готово"
 
 
+class TaskAction(models.TextChoices):
+    """Actions a user can run on a task; the API exposes them as `allowed_actions`."""
+
+    TAKE = "take", "Взять в работу"
+    SUBMIT = "submit", "Сдать на проверку"
+    ACCEPT = "accept", "Принять"
+    REQUEST_REVISION = "request_revision", "Отправить на правки"
+
+
 class CreativeType(models.TextChoices):
     STATIC = "static", "Статика"
     VIDEO = "video", "Видео"
