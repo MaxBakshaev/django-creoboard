@@ -10,7 +10,7 @@ api_v1 = [
     path("auth/", include("apps.users.urls")),
 ]
 
-# The schema and Swagger UI are exposed only in DEBUG; lead-only access comes with auth (step 3).
+# The schema and Swagger UI are exposed only in DEBUG; lead-only access in prod is step 13.
 if settings.DEBUG:
     api_v1 += [
         path("schema/", SpectacularAPIView.as_view(), name="schema"),

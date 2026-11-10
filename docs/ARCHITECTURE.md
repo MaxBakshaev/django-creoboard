@@ -96,7 +96,7 @@ django-creoboard/
 ## 6. Модель данных
 
 ### users.User (AbstractUser)
-`username` (логин), `first_name`, `last_name`, `role` ∈ {buyer, creative, lead}, `is_active`. Хеш пароля Argon2. Модель создана в шаге 1 без `role`, чтобы `AUTH_USER_MODEL` не менялся после первых миграций; `role` добавляется в шаге 3.
+`username` (логин), `first_name`, `last_name`, `role` ∈ {buyer, creative, lead} (пустая допускается только у суперпользователя), `is_active`. Хеш пароля Argon2. Модель создана в шаге 1 без `role`, чтобы `AUTH_USER_MODEL` не менялся после первых миграций; `role` добавляется в шаге 3.
 
 ### tasks.Task
 | Поле | Тип | Примечание |
@@ -194,7 +194,7 @@ django-creoboard/
 | `GET, POST /tasks/{id}/ai-usage/`, `PATCH, DELETE /ai-usage/{id}/` | creative | AI-расходы |
 | `GET /ai-services/` | авторизованные | справочник |
 | `GET /analytics/summary/`, `/workload/`, `/durations/`, `/ai-costs/` | lead | аналитика |
-| `GET /schema/`, `/docs/` | lead или DEBUG | OpenAPI и Swagger |
+| `GET /schema/`, `/docs/` | только при DEBUG | OpenAPI и Swagger; доступ для lead в prod добавляется в шаге 13 |
 
 Коды ошибок: 400 валидация, 401 не авторизован, 403 нет права, 404 нет такого объекта (в том числе чужого), 409 конфликт перехода или гонка, 413 слишком большой файл, 429 лимит запросов.
 
@@ -205,7 +205,8 @@ django-creoboard/
 | Пароли | Argon2 первым в `PASSWORD_HASHERS`, валидаторы Django |
 | Сессии | cookie `HttpOnly`, `Secure`, `SameSite=Lax`, ограничение срока |
 | CSRF | встроенный механизм Django, SPA отправляет `X-CSRFToken`; `CSRF_TRUSTED_ORIGINS` из env |
-| Брутфорс | DRF throttle на login + `limit_req` в nginx; опционально django-axes |
+| Брутфорс | Два слоя. 1) DRF throttle на login: отдельно по IP и по логину, номинал 5 попыток в минуту (`LOGIN_THROTTLE_IP`, `LOGIN_THROTTLE_USER`). Счётчики лежат в локальном кэше процесса, поэтому при 3 воркерах gunicorn реальный лимит в приложении **до 3 раз выше номинала** (до 15 попыток в минуту). 2) Строгий лимит обеспечивает nginx `limit_req` на `/api/v1/auth/login/`. IP клиента берётся из `X-Forwarded-For` с учётом `DJANGO_NUM_PROXIES` (на сервере 2: nginx Elestio и nginx `web`), без этой настройки заголовок можно подделать. Побочный эффект throttle по логину: известный логин можно ненадолго заблокировать. Опционально django-axes |
+| Вход | Неверный пароль, неизвестный и отключённый пользователь дают одинаковый ответ 400; превышение лимита даёт 429. CSRF проверяется и на login (защита от login CSRF). Пользователь без роли (суперпользователь) входит, но прав в API не получает, так как проверки сравнивают роль точно |
 | Авторизация | роль + владелец на каждом эндпоинте, queryset по роли, негативные тесты (IDOR) |
 | За прокси | `SECURE_PROXY_SSL_HEADER`, `ALLOWED_HOSTS`, заголовок `X-Forwarded-Proto` пробрасывается от Elestio |
 | Заголовки | CSP, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`, HSTS |
