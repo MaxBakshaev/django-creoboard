@@ -96,7 +96,7 @@ django-creoboard/
 ## 6. Модель данных
 
 ### users.User (AbstractUser)
-`username` (логин), `first_name`, `last_name`, `role` ∈ {buyer, creative, lead} (пустая допускается только у суперпользователя), `is_active`. Хеш пароля Argon2. Модель создана в шаге 1 без `role`, чтобы `AUTH_USER_MODEL` не менялся после первых миграций; `role` добавляется в шаге 3.
+`username` (логин), `first_name`, `last_name`, `role` ∈ {buyer, creative, lead} (пустая допускается только у суперпользователя, это гарантирует CheckConstraint), `is_active`. Хеш пароля Argon2. Модель создана в шаге 1 без `role`, чтобы `AUTH_USER_MODEL` не менялся после первых миграций; `role` добавляется в шаге 3.
 
 ### tasks.Task
 | Поле | Тип | Примечание |

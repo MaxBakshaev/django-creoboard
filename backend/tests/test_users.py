@@ -1,6 +1,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 
 from apps.users.models import Role
 from tests.factories import UserFactory
@@ -13,7 +14,9 @@ def test_user_model_is_the_project_user():
 
 
 def test_create_user_hashes_password_and_sets_aware_date_joined():
-    user = get_user_model().objects.create_user(username="buyer1", password="s3cret-pass-123")
+    user = get_user_model().objects.create_user(
+        username="buyer1", password="s3cret-pass-123", role=Role.BUYER
+    )
 
     assert user.check_password("s3cret-pass-123")
     assert user.password != "s3cret-pass-123"
@@ -38,3 +41,15 @@ def test_unknown_role_is_rejected_by_validation():
         user.full_clean()
 
     assert "role" in error.value.message_dict
+
+
+def test_non_superuser_without_role_is_rejected_by_validation():
+    user = UserFactory.build(role="")
+
+    with pytest.raises(ValidationError):
+        user.full_clean()
+
+
+def test_non_superuser_without_role_is_rejected_by_the_database():
+    with pytest.raises(IntegrityError), transaction.atomic():
+        get_user_model().objects.create_user(username="norole", password="x-Pass-1234", role="")

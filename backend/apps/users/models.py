@@ -16,3 +16,12 @@ class User(AbstractUser):
     """
 
     role = models.CharField("роль", max_length=16, choices=Role.choices, blank=True)
+
+    class Meta(AbstractUser.Meta):
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(role="") | models.Q(is_superuser=True),
+                name="user_role_required_unless_superuser",
+                violation_error_message="Роль обязательна для всех, кроме суперпользователя.",
+            ),
+        ]
