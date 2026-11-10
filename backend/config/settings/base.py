@@ -102,8 +102,17 @@ STORAGES = {
 MEDIA_URL = "media/"
 MEDIA_ROOT = env.path("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
+# Login throttling. Counters are kept in the per-process cache, so with several gunicorn
+# workers the real limit is up to (workers x nominal); the strict limit is nginx limit_req.
+LOGIN_THROTTLE_IP = env("LOGIN_THROTTLE_IP", default="5/min")
+LOGIN_THROTTLE_USER = env("LOGIN_THROTTLE_USER", default="5/min")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.users.authentication.SessionAuthentication401"],
+    # Number of reverse proxies in front of the app: DRF takes the client IP for throttling
+    # from X-Forwarded-For only when this is set (otherwise a client could spoof the header).
+    "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=0),
     # Secure by default: every endpoint requires login unless it opts out explicitly.
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],

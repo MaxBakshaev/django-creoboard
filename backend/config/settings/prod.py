@@ -21,6 +21,13 @@ X_FRAME_OPTIONS = "DENY"
 
 DATABASES["default"]["CONN_MAX_AGE"] = 60  # noqa: F405
 
+# Elestio nginx -> web nginx -> gunicorn: two proxies append to X-Forwarded-For.
+# Confirm the real chain on the first deploy (step 2) and override via the environment.
+REST_FRAMEWORK = {  # noqa: F405
+    **REST_FRAMEWORK,  # noqa: F405
+    "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=2),
+}
+
 # HSTS preload is a public, hard-to-undo commitment and does not fit a shared
 # service sub-domain, so this one deployment check is silenced on purpose.
 SILENCED_SYSTEM_CHECKS = ["security.W021"]
