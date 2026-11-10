@@ -99,4 +99,7 @@ docs/                                        документация
 ## Уроки (дополняй после каждой ошибки)
 
 - Windows: в `DATABASE_URL` использовать `127.0.0.1`, а не `localhost` (`localhost` может сначала уйти на недоступный `::1` и подвесить подключение). Порт БД из Docker 5433, потому что 5432 занят локальным PostgreSQL.
+- Poetry (`poetry add`, `poetry lock`) на этой машине берёт Python 3.10 и падает на резолве (`pycparser` требует >=3.11). Запускай его с `VIRTUAL_ENV` на `.venv` в корне (PowerShell: `$env:VIRTUAL_ENV="$PWD\.venv"; $env:Path="$PWD\.venv\Scripts;$env:Path"`).
+- В тестах не вызывай `reverse()` на уровне модуля: URLconf загрузится при сборе тестов, когда `DEBUG` ещё True, и появятся маршруты schema/docs. Используй литеральные пути или `reverse` внутри теста.
+- gitleaks (`generic-api-key`) срабатывает на «сложные» тестовые пароли в коде. Используй осмысленную фразу вроде `correct-horse-battery-staple`, а не отключай хук.
 - Python в PATH на машине разработчика может быть не 3.12 (там 3.10): окружение создавать через `make venv`, а не голым `python -m venv`.

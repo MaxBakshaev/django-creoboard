@@ -62,6 +62,8 @@
 - `docker/docker-compose.prod.yml`, `docker/nginx.conf`, временная страница-заглушка вместо SPA, проверка `make config` в CI.
 - `deploy.yml`: сборка образов, push в GHCR, SSH, `compose pull/up`, healthcheck, откат.
 - Настройка Elestio и секретов GitHub по `docs/SETUP_WINDOWS.md`.
+- `limit_req` для `/api/v1/auth/login/` в `docker/nginx.conf` (отдельная зона, `burst`, ответ 429) — это строгий лимит, так как лимит приложения из-за 3 воркеров gunicorn до 3 раз выше номинала. **Проверка:** серия быстрых POST на login через nginx контейнера `web` даёт 429.
+- Проверить `DJANGO_NUM_PROXIES` (по умолчанию в prod 2: nginx Elestio и nginx `web`): реальный IP клиента, а не подделанный `X-Forwarded-For`, попадает в throttle.
 - **Готово, когда:** по HTTPS-адресу сервиса открывается заглушка и отвечает `/api/v1/health/`.
 
 ### 3. Аутентификация
@@ -125,6 +127,7 @@
 - 1–2 e2e-сценария Playwright (полный цикл задачи).
 - Проверка по чек-листу безопасности из ARCHITECTURE, `pip-audit`, `npm audit`, Trivy.
 - Финальный README (демо-ссылка, пользователи), `docs/AI_WORKFLOW.md`.
+- Доступ lead к `/api/v1/schema/` и `/api/v1/docs/` в prod: permission `IsLead`, CSP для Swagger UI, тесты 401/403/200, обновить тест, который сейчас ожидает 404 без DEBUG.
 - Проверка, что в рабочем деплое `DEBUG=0`, секреты свои, бэкап настроен.
 
 ### 14. Бонус: уведомления

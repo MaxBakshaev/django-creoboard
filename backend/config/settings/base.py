@@ -68,12 +68,24 @@ DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = 5
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "users.User"
+# Argon2 is the only hasher for new passwords; PBKDF2 stays second so that hashes
+# created elsewhere (for example by a data import) can still be verified and upgraded.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+]
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Lax"
+CSRF_COOKIE_SAMESITE = "Lax"
+# The SPA reads the csrftoken cookie and sends it back in X-CSRFToken, so it must stay readable.
+CSRF_COOKIE_HTTPONLY = False
 
 LANGUAGE_CODE = "ru"
 TIME_ZONE = "UTC"
@@ -90,8 +102,17 @@ STORAGES = {
 MEDIA_URL = "media/"
 MEDIA_ROOT = env.path("DJANGO_MEDIA_ROOT", default=str(BASE_DIR / "media"))
 
+# Login throttling. Counters are kept in the per-process cache, so with several gunicorn
+# workers the real limit is up to (workers x nominal); the strict limit is nginx limit_req.
+LOGIN_THROTTLE_IP = env("LOGIN_THROTTLE_IP", default="5/min")
+LOGIN_THROTTLE_USER = env("LOGIN_THROTTLE_USER", default="5/min")
+CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
+    "DEFAULT_AUTHENTICATION_CLASSES": ["apps.users.authentication.SessionAuthentication401"],
+    # Number of reverse proxies in front of the app: DRF takes the client IP for throttling
+    # from X-Forwarded-For only when this is set (otherwise a client could spoof the header).
+    "NUM_PROXIES": env.int("DJANGO_NUM_PROXIES", default=0),
     # Secure by default: every endpoint requires login unless it opts out explicitly.
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
