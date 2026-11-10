@@ -52,3 +52,29 @@ class TaskEventFactory(factory.django.DjangoModelFactory):
     task = factory.SubFactory(TaskFactory)
     actor = factory.LazyAttribute(lambda o: o.task.buyer)
     action = "created"
+
+
+class TaskReferenceFactory(factory.django.DjangoModelFactory):
+    """A link reference by default; pass `kind="file"` fields explicitly for a file."""
+
+    class Meta:
+        model = "tasks.TaskReference"
+
+    task = factory.SubFactory(TaskFactory)
+    kind = "link"
+    url = factory.Sequence(lambda n: f"https://example.com/ref/{n}")
+
+
+class TaskAttachmentFactory(factory.django.DjangoModelFactory):
+    """A result row without a real file on disk (enough for rules that only count rows)."""
+
+    class Meta:
+        model = "tasks.TaskAttachment"
+
+    task = factory.SubFactory(TaskFactory)
+    uploaded_by = factory.LazyAttribute(lambda o: o.task.assignee)
+    file = factory.Sequence(lambda n: f"attachments/{n:032x}.png")
+    original_name = "result.png"
+    size = 10
+    content_type = "image/png"
+    round = factory.LazyAttribute(lambda o: o.task.revision_count)

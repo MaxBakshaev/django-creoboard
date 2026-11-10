@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.tasks import services
 from apps.tasks.models import Task, TaskEvent, TaskStatus
-from tests.factories import DEFAULT_PASSWORD, TaskFactory, UserFactory
+from tests.factories import DEFAULT_PASSWORD, TaskAttachmentFactory, TaskFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -44,9 +44,13 @@ def as_user(api_client, user):
 
 
 def task_in(status: TaskStatus, *, assignee=None, **fields):
+    """A task in the status; one the assignee works on already has a result (submit needs it)."""
     if status != TaskStatus.NEW and assignee is None:
         assignee = UserFactory(creative=True)
-    return TaskFactory(status=status, assignee=assignee, **fields)
+    task = TaskFactory(status=status, assignee=assignee, **fields)
+    if status in {TaskStatus.IN_PROGRESS, TaskStatus.REVISION}:
+        TaskAttachmentFactory(task=task, uploaded_by=assignee, round=task.revision_count)
+    return task
 
 
 def post(api_client, user, task_id, action, body=None):
@@ -481,6 +485,7 @@ def test_transitions_show_up_in_the_history_for_whoever_sees_the_task(api_client
     task = TaskFactory()
     creative = UserFactory(creative=True)
     post(api_client, creative, task.pk, "take")
+    TaskAttachmentFactory(task=task, uploaded_by=creative, round=0)
     post(api_client, creative, task.pk, "submit")
     post(api_client, task.buyer, task.pk, "request-revision", {"comment": "Fix."})
 
