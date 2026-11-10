@@ -17,7 +17,7 @@ dependencies = [
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
-pytest = ">=8.3,<9.0"
+pytest = ">=9.0.3,<10.0"
 pytest-django = ">=4.11,<5.0"
 pytest-cov = ">=6.0,<8.0"
 factory-boy = ">=3.3,<4.0"
