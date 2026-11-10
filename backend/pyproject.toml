@@ -1,0 +1,51 @@
+[project]
+name = "creoboard-backend"
+version = "0.1.0"
+description = "CreoBoard backend: Django + DRF"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django (>=5.2,<5.3)",
+    "djangorestframework (>=3.16,<4.0)",
+    "drf-spectacular (>=0.28,<1.0)",
+    "django-environ (>=0.12,<1.0)",
+    "psycopg[binary] (>=3.2,<4.0)",
+    "gunicorn (>=23.0,<24.0)",
+    "whitenoise (>=6.9,<7.0)",
+]
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.3,<9.0"
+pytest-django = ">=4.11,<5.0"
+pytest-cov = ">=6.0,<8.0"
+factory-boy = ">=3.3,<4.0"
+ruff = "0.17.4"  # keep equal to the ruff-pre-commit rev in .pre-commit-config.yaml
+bandit = ">=1.8,<2.0"
+pip-audit = ">=2.9,<3.0"
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "DJ", "C4", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.dev"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "--strict-markers"
+
+[tool.coverage.run]
+source = ["apps", "config"]
+omit = ["*/migrations/*"]
