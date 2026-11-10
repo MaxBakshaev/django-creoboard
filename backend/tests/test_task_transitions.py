@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.tasks import services
 from apps.tasks.models import ImmutableRecordError, Task, TaskAction, TaskEvent, TaskStatus
-from tests.factories import TaskFactory, UserFactory
+from tests.factories import TaskAttachmentFactory, TaskFactory, UserFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -27,11 +27,23 @@ def call(action: str, task, actor, **extra):
     return function(task_id=task.pk, actor=actor, **extra)
 
 
+def attach_result(task):
+    """Gives the task a result of its current round (the precondition of `submit`)."""
+    task.refresh_from_db()
+    return TaskAttachmentFactory(task=task, uploaded_by=task.assignee, round=task.revision_count)
+
+
 def task_in(status: TaskStatus, *, assignee=None, **fields):
-    """A task in the given status, built through the ORM (tests may; the app may not)."""
+    """A task in the given status, built through the ORM (tests may; the app may not).
+
+    A task the assignee is working on already has a result, so that it can be submitted.
+    """
     if status != TaskStatus.NEW and assignee is None:
         assignee = UserFactory(creative=True)
-    return TaskFactory(status=status, assignee=assignee, **fields)
+    task = TaskFactory(status=status, assignee=assignee, **fields)
+    if status in {TaskStatus.IN_PROGRESS, TaskStatus.REVISION}:
+        attach_result(task)
+    return task
 
 
 def valid_actor(action: str, task):
@@ -112,8 +124,10 @@ def test_full_cycle_with_a_revision_round():
     creative = UserFactory(creative=True)
 
     services.take(task_id=task.pk, actor=creative)
+    attach_result(task)
     services.submit(task_id=task.pk, actor=creative)
     services.request_revision(task_id=task.pk, actor=task.buyer, comment="Again, please.")
+    attach_result(task)
     services.submit(task_id=task.pk, actor=creative)
     services.accept(task_id=task.pk, actor=task.buyer)
 
@@ -136,8 +150,10 @@ def test_taken_at_is_kept_when_the_task_goes_through_revisions():
     services.take(task_id=task.pk, actor=creative)
     taken_at = Task.objects.get(pk=task.pk).taken_at
 
+    attach_result(task)
     services.submit(task_id=task.pk, actor=creative)
     services.request_revision(task_id=task.pk, actor=task.buyer, comment="Fix.")
+    attach_result(task)
     services.submit(task_id=task.pk, actor=creative)
 
     assert Task.objects.get(pk=task.pk).taken_at == taken_at
